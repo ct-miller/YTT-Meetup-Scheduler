@@ -199,7 +199,8 @@
     let html = '';
 
     sorted.forEach(([key, count]) => {
-      const [dateStr, time] = key.split('-');
+      const dateStr = key.substring(0, 10);
+      const time = key.substring(11);
       const d = new Date(dateStr);
       const weekday = weekdays[(d.getDay() + 6) % 7];
       const month = d.toLocaleString('default', { month: 'short' });
