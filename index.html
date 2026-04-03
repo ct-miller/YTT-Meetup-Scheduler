@@ -6,29 +6,49 @@
   <style>
     body { font-family: Arial, sans-serif; text-align: center; }
     h1 { margin-top: 20px; }
+    .controls { margin-top: 10px; }
     .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-width: 900px; margin: 20px auto; }
     .day { border: 1px solid #ccc; padding: 10px; border-radius: 8px; }
+    .hidden { display: none; }
     .weekday { font-size: 12px; font-weight: bold; }
     .date { font-size: 14px; }
     .times { margin-top: 5px; }
     .times label { display: block; font-size: 12px; }
-    input { padding: 8px; margin: 10px; }
+    input, textarea { padding: 8px; margin: 10px; }
+    textarea { width: 80%; max-width: 500px; }
     button { padding: 10px 20px; margin-top: 10px; cursor: pointer; }
     .results { margin-top: 20px; text-align: left; max-width: 700px; margin-left: auto; margin-right: auto; }
     .best { background: #c8f7c5; padding: 5px; border-radius: 5px; }
     .all-day { font-size: 12px; margin-top: 5px; display: block; }
+    .final { background: #ffeaa7; padding: 8px; border-radius: 6px; margin-bottom: 10px; }
   </style>
 </head>
 <body>
 
 <h1>Group Availability Scheduler</h1>
-<p>Enter your name and select availability:</p>
+<p>Enter your name, notes, and select availability:</p>
 
 <input type="text" id="name" placeholder="Your name" />
+<br>
+<textarea id="notes" placeholder="Add any notes (optional)..."></textarea>
+
+<div class="controls">
+  <label>
+    <input type="checkbox" id="weekendToggle"> Show weekends only
+  </label>
+</div>
+
+<h3>Global Message</h3>
+<textarea id="globalMessage" placeholder="Add a message for the group (e.g., location, agenda)..."></textarea>
+<br>
+<button onclick="saveGlobalMessage()">Save Message</button>
+
+<div id="globalDisplay"></div>
 
 <div class="calendar" id="calendar"></div>
 
 <button onclick="submitAvailability()">Submit Availability</button>
+<button onclick="finalizeBest()">Finalize Best Option</button>
 
 <div class="results">
   <h2>Group Results</h2>
@@ -37,7 +57,7 @@
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+  import { getFirestore, collection, addDoc, onSnapshot, setDoc, doc } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyAl6ZcsV9ZqG1_yTB9qccTKCOSm9ZDDNvY",
@@ -52,22 +72,35 @@
   const db = getFirestore(app);
 
   const calendar = document.getElementById('calendar');
-  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  const timeSlots = ["Morning", "Afternoon", "Evening"];
+  const weekendToggle = document.getElementById('weekendToggle');
+  const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const timeSlots = [
+    "08:00–12:00",
+    "12:00–16:00",
+    "16:00–22:00"
+  ];
 
   const today = new Date();
+  const start = new Date(today);
+  const day = start.getDay();
+  const diff = (day === 0 ? -6 : 1 - day);
+  start.setDate(start.getDate() + diff);
+
+  const dayElements = [];
 
   for (let i = 0; i < 30; i++) {
-    const date = new Date();
-    date.setDate(today.getDate() + i);
+    const date = new Date(start);
+    date.setDate(start.getDate() + i);
 
     const key = date.toISOString().split('T')[0];
-    const weekday = weekdays[date.getDay()];
+    const weekdayIndex = (date.getDay() + 6) % 7;
+    const weekday = weekdays[weekdayIndex];
     const month = date.toLocaleString('default', { month: 'short' });
     const dayNum = date.getDate();
 
     const div = document.createElement('div');
     div.className = 'day';
+    div.dataset.weekdayIndex = weekdayIndex;
 
     let timesHTML = '';
     timeSlots.forEach(slot => {
@@ -89,10 +122,21 @@
     });
 
     calendar.appendChild(div);
+    dayElements.push(div);
   }
+
+  weekendToggle.addEventListener('change', () => {
+    const showWeekends = weekendToggle.checked;
+    dayElements.forEach(div => {
+      const idx = parseInt(div.dataset.weekdayIndex);
+      const isWeekend = (idx === 5 || idx === 6);
+      div.classList.toggle('hidden', showWeekends ? !isWeekend : false);
+    });
+  });
 
   async function submitAvailability() {
     const name = document.getElementById('name').value.trim();
+    const notes = document.getElementById('notes').value.trim();
     if (!name) return alert('Enter your name');
 
     const checks = document.querySelectorAll('input[data-time]:checked');
@@ -104,21 +148,50 @@
 
     await addDoc(collection(db, "availability"), {
       name,
+      notes,
       entries
     });
 
     document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
     document.getElementById('name').value = '';
+    document.getElementById('notes').value = '';
+  }
+
+  async function saveGlobalMessage() {
+    const msg = document.getElementById('globalMessage').value;
+    await setDoc(doc(db, "meta", "global"), { message: msg });
+  }
+
+  async function finalizeBest() {
+    if (!window.bestOption) return alert('No data yet');
+    await setDoc(doc(db, "meta", "final"), { best: window.bestOption });
   }
 
   const output = document.getElementById('output');
+  const globalDisplay = document.getElementById('globalDisplay');
+
+  onSnapshot(doc(db, "meta", "global"), (docSnap) => {
+    if (docSnap.exists()) {
+      globalDisplay.innerHTML = `<div class="final"><strong>Message:</strong> ${docSnap.data().message}</div>`;
+    }
+  });
+
+  onSnapshot(doc(db, "meta", "final"), (docSnap) => {
+    if (docSnap.exists()) {
+      const b = docSnap.data().best;
+      output.innerHTML = `<div class="final"><strong>Finalized:</strong> ${b}</div>` + output.innerHTML;
+    }
+  });
 
   onSnapshot(collection(db, "availability"), (snapshot) => {
     const counts = {};
     const peopleMap = {};
+    const notesMap = {};
 
     snapshot.forEach(doc => {
       const data = doc.data();
+      notesMap[data.name] = data.notes;
+
       data.entries.forEach(entry => {
         const key = `${entry.date}-${entry.time}`;
 
@@ -140,15 +213,22 @@
     sorted.forEach(([key, count]) => {
       const [dateStr, time] = key.split('-');
       const d = new Date(dateStr);
-      const weekday = weekdays[d.getDay()];
+      const weekday = weekdays[(d.getDay() + 6) % 7];
       const month = d.toLocaleString('default', { month: 'short' });
       const dayNum = d.getDate();
 
-      const people = peopleMap[key].join(', ');
+      const people = peopleMap[key].map(p => {
+        const note = notesMap[p] ? ` (${notesMap[p]})` : '';
+        return p + note;
+      }).join(', ');
+
       const isBest = count === bestCount;
 
+      const label = `${weekday} ${month} ${dayNum} (${time})`;
+      if (isBest) window.bestOption = label;
+
       html += `<div class="${isBest ? 'best' : ''}">
-        <strong>${weekday} ${month} ${dayNum} (${time})</strong>: ${count} people<br>
+        <strong>${label}</strong>: ${count} people<br>
         <em>${people}</em>
       </div><br>`;
     });
