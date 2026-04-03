@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Group Availability Scheduler</title>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; }
+    h1 { margin-top: 20px; }
+    .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-width: 900px; margin: 20px auto; }
+    .day { border: 1px solid #ccc; padding: 10px; border-radius: 8px; }
+    .weekday { font-size: 12px; font-weight: bold; }
+    .date { font-size: 14px; }
+    .times { margin-top: 5px; }
+    .times label { display: block; font-size: 12px; }
+    input { padding: 8px; margin: 10px; }
+    button { padding: 10px 20px; margin-top: 10px; cursor: pointer; }
+    .results { margin-top: 20px; text-align: left; max-width: 700px; margin-left: auto; margin-right: auto; }
+    .best { background: #c8f7c5; padding: 5px; border-radius: 5px; }
+    .all-day { font-size: 12px; margin-top: 5px; display: block; }
+  </style>
+</head>
+<body>
+
+<h1>Group Availability Scheduler</h1>
+<p>Enter your name and select availability:</p>
+
+<input type="text" id="name" placeholder="Your name" />
+
+<div class="calendar" id="calendar"></div>
+
+<button onclick="submitAvailability()">Submit Availability</button>
+
+<div class="results">
+  <h2>Group Results</h2>
+  <div id="output"></div>
+</div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-app.js";
+  import { getFirestore, collection, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyAl6ZcsV9ZqG1_yTB9qccTKCOSm9ZDDNvY",
+    authDomain: "ytt-meetup-scheduler.firebaseapp.com",
+    projectId: "ytt-meetup-scheduler",
+    storageBucket: "ytt-meetup-scheduler.firebasestorage.app",
+    messagingSenderId: "691109600721",
+    appId: "1:691109600721:web:cbed304948fcc8dcf054f0"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  const calendar = document.getElementById('calendar');
+  const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const timeSlots = ["Morning", "Afternoon", "Evening"];
+
+  const today = new Date();
+
+  for (let i = 0; i < 30; i++) {
+    const date = new Date();
+    date.setDate(today.getDate() + i);
+
+    const key = date.toISOString().split('T')[0];
+    const weekday = weekdays[date.getDay()];
+    const month = date.toLocaleString('default', { month: 'short' });
+    const dayNum = date.getDate();
+
+    const div = document.createElement('div');
+    div.className = 'day';
+
+    let timesHTML = '';
+    timeSlots.forEach(slot => {
+      timesHTML += `<label><input type="checkbox" data-date="${key}" data-time="${slot}"> ${slot}</label>`;
+    });
+
+    div.innerHTML = `
+      <div class="weekday">${weekday}</div>
+      <div class="date">${month} ${dayNum}</div>
+      <label class="all-day">
+        <input type="checkbox" data-allday="${key}"> All Day
+      </label>
+      <div class="times">${timesHTML}</div>
+    `;
+
+    div.querySelector(`[data-allday="${key}"]`).addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      div.querySelectorAll('input[data-time]').forEach(c => c.checked = checked);
+    });
+
+    calendar.appendChild(div);
+  }
+
+  async function submitAvailability() {
+    const name = document.getElementById('name').value.trim();
+    if (!name) return alert('Enter your name');
+
+    const checks = document.querySelectorAll('input[data-time]:checked');
+
+    const entries = [];
+    checks.forEach(c => {
+      entries.push({ date: c.dataset.date, time: c.dataset.time });
+    });
+
+    await addDoc(collection(db, "availability"), {
+      name,
+      entries
+    });
+
+    document.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+    document.getElementById('name').value = '';
+  }
+
+  const output = document.getElementById('output');
+
+  onSnapshot(collection(db, "availability"), (snapshot) => {
+    const counts = {};
+    const peopleMap = {};
+
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      data.entries.forEach(entry => {
+        const key = `${entry.date}-${entry.time}`;
+
+        if (!counts[key]) {
+          counts[key] = 0;
+          peopleMap[key] = [];
+        }
+
+        counts[key]++;
+        peopleMap[key].push(data.name);
+      });
+    });
+
+    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    const bestCount = sorted.length ? sorted[0][1] : 0;
+
+    let html = '';
+
+    sorted.forEach(([key, count]) => {
+      const [dateStr, time] = key.split('-');
+      const d = new Date(dateStr);
+      const weekday = weekdays[d.getDay()];
+      const month = d.toLocaleString('default', { month: 'short' });
+      const dayNum = d.getDate();
+
+      const people = peopleMap[key].join(', ');
+      const isBest = count === bestCount;
+
+      html += `<div class="${isBest ? 'best' : ''}">
+        <strong>${weekday} ${month} ${dayNum} (${time})</strong>: ${count} people<br>
+        <em>${people}</em>
+      </div><br>`;
+    });
+
+    output.innerHTML = html || 'No data yet';
+  });
+</script>
+
+</body>
+</html>
