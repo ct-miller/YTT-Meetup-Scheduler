@@ -172,6 +172,7 @@
   const output = document.getElementById('output');
 
   onSnapshot(collection(db, "availability"), (snapshot) => {
+    const predefinedNames = ["Christina","Jacob","Marlowe","Emily","Racheal","Jackie","Elma","Danielle","Shannon"].sort();
     const people = [];
     const dateSet = new Set();
     const availabilityMap = {}; // name -> set of date|time
@@ -181,7 +182,6 @@
       const name = data.name;
       if (!availabilityMap[name]) {
         availabilityMap[name] = new Set();
-        people.push(name);
       }
 
       data.entries.forEach(entry => {
@@ -189,6 +189,17 @@
         availabilityMap[name].add(key);
         dateSet.add(key);
       });
+    });
+
+    // Ensure all predefined names exist
+    predefinedNames.forEach(n => {
+      if (!availabilityMap[n]) {
+        availabilityMap[n] = new Set();
+      }
+    });
+
+    // Use predefined alphabetical list
+    const peopleList = predefinedNames;
     });
 
     const dates = Array.from(dateSet).sort();
@@ -199,26 +210,26 @@
     }
 
     // Build table
-      let html = '<div style="overflow-x:auto;"><table border="1" style="border-collapse: collapse; width: 100%; text-align: center;">';
+    let html = '<table border="1" style="border-collapse: collapse; width: 100%; text-align: center;">';
+
     // Header row
-    html += '<tr><th style="position:sticky; left:0; background:#fff; z-index:2;">Name</th>';
+    html += '<tr><th>Name</th>';
     dates.forEach(key => {
       const dateStr = key.substring(0, 10);
       const time = key.substring(11);
       const d = new Date(dateStr);
-      const dateStr = key.substring(0, 10);
-      const d = new Date(dateStr);
+      const weekday = weekdays[(d.getDay() + 6) % 7];
       const month = d.toLocaleString('default', { month: 'short' });
       const dayNum = d.getDate();
 
-html += `<th>${month} ${dayNum}</th>`;
       html += `<th>${weekday}<br>${month} ${dayNum}<br><small>${time}</small></th>`;
     });
     html += '</tr>';
 
     // Rows per person
-    people.forEach(name => {
-        html += `<tr><td style="position:sticky; left:0; background:#fff; z-index:1;"><strong>${name}</strong></td>`;
+    peopleList.forEach(name => {
+      html += `<tr><td><strong>${name}</strong></td>`;
+
       dates.forEach(key => {
         const has = availabilityMap[name].has(key);
         html += `<td>${has ? '✓' : ''}</td>`;
@@ -227,7 +238,7 @@ html += `<th>${month} ${dayNum}</th>`;
       html += '</tr>';
     });
 
-    html += '</table></div>';
+    html += '</table>';
 
     output.innerHTML = html;
   });
