@@ -205,7 +205,16 @@
     const dates = Array.from(dateSet).sort();
 
     if (dates.length === 0) {
-      output.innerHTML = 'No data yet';
+      // Still show names even if no one submitted yet
+      let html = '<table border="1" style="border-collapse: collapse; width: 100%; text-align: center;">';
+      html += '<tr><th>Name</th><th>No availability submitted yet</th></tr>';
+
+      peopleList.forEach(name => {
+        html += `<tr><td><strong>${name}</strong></td><td></td></tr>`;
+      });
+
+      html += '</table>';
+      output.innerHTML = html;
       return;
     }
 
