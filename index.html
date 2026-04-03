@@ -172,54 +172,64 @@
   const output = document.getElementById('output');
 
   onSnapshot(collection(db, "availability"), (snapshot) => {
-    const counts = {};
-    const peopleMap = {};
-    const notesMap = {};
+    const people = [];
+    const dateSet = new Set();
+    const availabilityMap = {}; // name -> set of date|time
 
     snapshot.forEach(doc => {
       const data = doc.data();
-      notesMap[data.name] = data.notes;
+      const name = data.name;
+      if (!availabilityMap[name]) {
+        availabilityMap[name] = new Set();
+        people.push(name);
+      }
 
       data.entries.forEach(entry => {
-        const key = `${entry.date}-${entry.time}`;
-
-        if (!counts[key]) {
-          counts[key] = 0;
-          peopleMap[key] = [];
-        }
-
-        counts[key]++;
-        peopleMap[key].push(data.name);
+        const key = `${entry.date}|${entry.time}`;
+        availabilityMap[name].add(key);
+        dateSet.add(key);
       });
     });
 
-    const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-    const bestCount = sorted.length ? sorted[0][1] : 0;
+    const dates = Array.from(dateSet).sort();
 
-    let html = '';
+    if (dates.length === 0) {
+      output.innerHTML = 'No data yet';
+      return;
+    }
 
-    sorted.forEach(([key, count]) => {
+    // Build table
+      let html = '<div style="overflow-x:auto;"><table border="1" style="border-collapse: collapse; width: 100%; text-align: center;">';
+    // Header row
+    html += '<tr><th style="position:sticky; left:0; background:#fff; z-index:2;">Name</th>';
+    dates.forEach(key => {
       const dateStr = key.substring(0, 10);
       const time = key.substring(11);
       const d = new Date(dateStr);
-      const weekday = weekdays[(d.getDay() + 6) % 7];
+      const dateStr = key.substring(0, 10);
+      const d = new Date(dateStr);
       const month = d.toLocaleString('default', { month: 'short' });
       const dayNum = d.getDate();
 
-      const people = peopleMap[key].map(p => {
-        const note = notesMap[p] ? ` (${notesMap[p]})` : '';
-        return p + note;
-      }).join(', ');
+html += `<th>${month} ${dayNum}</th>`;
+      html += `<th>${weekday}<br>${month} ${dayNum}<br><small>${time}</small></th>`;
+    });
+    html += '</tr>';
 
-      const isBest = count === bestCount;
+    // Rows per person
+    people.forEach(name => {
+        html += `<tr><td style="position:sticky; left:0; background:#fff; z-index:1;"><strong>${name}</strong></td>`;
+      dates.forEach(key => {
+        const has = availabilityMap[name].has(key);
+        html += `<td>${has ? '✓' : ''}</td>`;
+      });
 
-      html += `<div class="${isBest ? 'best' : ''}">
-        <strong>${weekday} ${month} ${dayNum} (${time})</strong>: ${count} people<br>
-        <em>${people}</em>
-      </div><br>`;
+      html += '</tr>';
     });
 
-    output.innerHTML = html || 'No data yet';
+    html += '</table></div>';
+
+    output.innerHTML = html;
   });
 </script>
 
