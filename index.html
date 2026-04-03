@@ -9,6 +9,7 @@
     .controls { margin-top: 10px; }
     .calendar { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; max-width: 1000px; margin: 20px auto; }
     .day { border: 1px solid #ccc; padding: 14px; border-radius: 10px; min-height: 140px; }
+    .past { background: #f0f0f0; opacity: 0.6; }
     .hidden { display: none; }
     .weekday { font-size: 12px; font-weight: bold; }
     .date { font-size: 14px; margin-bottom: 6px; }
@@ -123,6 +124,14 @@
       const checked = e.target.checked;
       div.querySelectorAll('input[data-time]').forEach(c => c.checked = checked);
     });
+
+        // Grey out past dates
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    if (date < today) {
+      div.classList.add('past');
+      div.querySelectorAll('input').forEach(i => i.disabled = true);
+    }
 
     calendar.appendChild(div);
     dayElements.push(div);
